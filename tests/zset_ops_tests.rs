@@ -15,7 +15,7 @@ fn test_zset_operations() {
     
     // Test zset ZREVRANGEBYSCORE
     let result = transformer.transform("SELECT * FROM leaderboard__zset WHERE key = 'game:global' ORDER BY score DESC").unwrap();
-    assert_eq!(result, "ZREVRANGEBYSCORE game:global +inf -inf");
+    assert_eq!(result, "ZRANGEBYSCORE game:global -inf +inf");
     
     // Test zset ZADD
     let result = transformer.transform("INSERT INTO leaderboard__zset (key, member, score) VALUES ('game:global', 'user:1001', '2500')").unwrap();

@@ -45,7 +45,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sql-to-redis = { git = "https://your-repo-url" }
+sql-to-redis = { git = "https://github.com/allen-munsch/rust-sql-to-nosql" }
 ```
 
 ### Basic Usage

@@ -1,5 +1,7 @@
 # rust-sql-to-nosql
 
+An exploration of a lua based BNF grammar for redis, could through effort be modified to cover any nosql grammar.
+
 ## Overview
 
 This Rust library provides a flexible and powerful tool for transforming SQL queries into NoSQL (specifically Redis) commands. By leveraging a rule-based approach, the library can intelligently convert various SQL statements into equivalent NoSQL operations.
@@ -33,9 +35,9 @@ The library currently supports transformations for:
 
 The library uses a template-based transformation approach:
 
-1. Parse the incoming SQL statement into an Abstract Syntax Tree (AST)
+1. Parse the incoming SQL statement into an Abstract Syntax Tree (AST) via sqlparser
 2. Match the statement against predefined transformation rules
-3. Render a corresponding Redis command using a template engine
+3. Render a corresponding Redis command using a template engine (tera)
 
 ## Getting Started
 
@@ -81,10 +83,13 @@ Written in Rust, this library offers:
 - Currently focused on Redis as the target NoSQL database
 - Supports a subset of SQL operations
 - Complex queries might require custom rule implementation
+- Nested operations and clauses are currently spotty at best
 
 ## Disclaimer
 
-This library provides a low-effort transformation and does not cover all possible SQL scenarios. Always validate the generated NoSQL commands in your specific use case. Honestly, just a toy program.
+This library provides a low-effort transformation and does not cover all possible SQL scenarios. Always validate the generated NoSQL commands in your specific use case. 
+
+Honestly, just a toy program.
 
 ```
 SQL: SELECT * FROM users WHERE key = 'user:1001'

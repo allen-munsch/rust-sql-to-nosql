@@ -1,0 +1,1 @@
+ZREVRANGEBYSCORE {{ key }} {{ max }} {{ min }}

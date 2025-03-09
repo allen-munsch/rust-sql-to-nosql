@@ -1,0 +1,1 @@
+LSET {{ key }} {{ index }} {{ value }}

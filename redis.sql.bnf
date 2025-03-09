@@ -1,0 +1,734 @@
+/* Top-level SQL to Redis command mapping */
+
+<sql-to-redis> ::= <select-stmt> | <insert-stmt> | <update-stmt> | <delete-stmt>
+
+/* SELECT statement transformations */
+
+<select-stmt> ::= 
+    "SELECT" <select-list> "FROM" <table-name> ["WHERE" <where-clause>] [<limit-clause>]
+    => <redis-get-command>
+
+<redis-get-command> ::=
+    <string-get> | <hash-get> | <list-get> | <set-get> | <zset-get>
+
+/* String operations */
+<string-get> ::= 
+    "SELECT" "*" "FROM" <table> "WHERE" "key" "=" <value>
+    => "GET" <value>
+
+/* Hash operations */
+<hash-get> ::= 
+    "SELECT" "*" "FROM" <table> "__hash" "WHERE" "key" "=" <value>
+    => "HGETALL" <value>
+  | "SELECT" <field> "FROM" <table> "__hash" "WHERE" "key" "=" <value>
+    => "HGET" <value> <field>
+  | "SELECT" <field1> ["," <field2>]... "FROM" <table> "__hash" "WHERE" "key" "=" <value>
+    => "HMGET" <value> <field1> [<field2>]...
+
+/* List operations */
+<list-get> ::= 
+    "SELECT" "*" "FROM" <table> "__list" "WHERE" "key" "=" <value>
+    => "LRANGE" <value> "0" "-1"
+  | "SELECT" "*" "FROM" <table> "__list" "WHERE" "key" "=" <value> "AND" "index" "=" <index>
+    => "LINDEX" <value> <index>
+  | "SELECT" "*" "FROM" <table> "__list" "WHERE" "key" "=" <value> "AND" "index" "<" <index>
+    => "LRANGE" <value> "0" <index-1>
+  | "SELECT" "*" "FROM" <table> "__list" "WHERE" "key" "=" <value> "LIMIT" <limit>
+    => "LRANGE" <value> "0" <limit-1>
+
+/* Set operations */
+<set-get> ::= 
+    "SELECT" "*" "FROM" <table> "__set" "WHERE" "key" "=" <value>
+    => "SMEMBERS" <value>
+  | "SELECT" "*" "FROM" <table> "__set" "WHERE" "key" "=" <value> "AND" "member" "=" <member>
+    => "SISMEMBER" <value> <member>
+  | "SELECT" "COUNT(*)" "FROM" <table> "__set" "WHERE" "key" "=" <value>
+    => "SCARD" <value>
+
+/* Sorted Set operations */
+<zset-get> ::= 
+    "SELECT" "*" "FROM" <table> "__zset" "WHERE" "key" "=" <value>
+    => "ZRANGEBYSCORE" <value> "-inf" "+inf"
+  | "SELECT" "*" "FROM" <table> "__zset" "WHERE" "key" "=" <value> "AND" "score" ">" <score>
+    => "ZRANGEBYSCORE" <value> "(<score>" "+inf"
+  | "SELECT" "*" "FROM" <table> "__zset" "WHERE" "key" "=" <value> "AND" "score" ">=" <score>
+    => "ZRANGEBYSCORE" <value> <score> "+inf"
+  | "SELECT" "*" "FROM" <table> "__zset" "WHERE" "key" "=" <value> "AND" "score" "<" <score>
+    => "ZRANGEBYSCORE" <value> "-inf" "(<score>"
+  | "SELECT" "*" "FROM" <table> "__zset" "WHERE" "key" "=" <value> "AND" "score" "<=" <score>
+    => "ZRANGEBYSCORE" <value> "-inf" <score>
+  | "SELECT" "*" "FROM" <table> "__zset" "WHERE" "key" "=" <value> "AND" "score" "BETWEEN" <min> "AND" <max>
+    => "ZRANGEBYSCORE" <value> <min> <max>
+  | "SELECT" "*" "FROM" <table> "__zset" "WHERE" "key" "=" <value> "ORDER BY" "score" "DESC"
+    => "ZREVRANGEBYSCORE" <value> "+inf" "-inf"
+  | "SELECT" "COUNT(*)" "FROM" <table> "__zset" "WHERE" "key" "=" <value> "AND" "score" "BETWEEN" <min> "AND" <max>
+    => "ZCOUNT" <value> <min> <max>
+
+/* INSERT statement transformations */
+
+<insert-stmt> ::= 
+    "INSERT" "INTO" <table-name> <column-list> "VALUES" <values-list>
+    => <redis-set-command>
+
+<redis-set-command> ::=
+    <string-set> | <hash-set> | <list-push> | <set-add> | <zset-add>
+
+/* String operations */
+<string-set> ::= 
+    "INSERT" "INTO" <table> "(key, value)" "VALUES" "(" <key> "," <value> ")"
+    => "SET" <key> <value>
+
+/* Hash operations */
+<hash-set> ::= 
+    "INSERT" "INTO" <table> "__hash" "(key, field1 [, field2]...)" "VALUES" "(" <key> "," <value1> [, <value2>]... ")"
+    => "HSET" <key> <field1> <value1> [<field2> <value2>]...
+
+/* List operations */
+<list-push> ::= 
+    "INSERT" "INTO" <table> "__list" "(key, value)" "VALUES" "(" <key> "," <value> ")"
+    => "RPUSH" <key> <value>
+
+/* Set operations */
+<set-add> ::= 
+    "INSERT" "INTO" <table> "__set" "(key, member)" "VALUES" "(" <key> "," <member> ")"
+    => "SADD" <key> <member>
+  | "INSERT" "INTO" <table> "__set" "(key, member)" "VALUES" "(" <key> "," <member1> "), (" <key> "," <member2> ")..."
+    => "SADD" <key> <member1> <member2>...
+
+/* Sorted Set operations */
+<zset-add> ::= 
+    "INSERT" "INTO" <table> "__zset" "(key, member, score)" "VALUES" "(" <key> "," <member> "," <score> ")"
+    => "ZADD" <key> <score> <member>
+
+/* UPDATE statement transformations */
+
+<update-stmt> ::= 
+    "UPDATE" <table-name> "SET" <set-clause> "WHERE" <where-clause>
+    => <redis-update-command>
+
+<redis-update-command> ::=
+    <string-update> | <hash-update> | <list-update> | <zset-update>
+
+/* String operations */
+<string-update> ::= 
+    "UPDATE" <table> "SET" "value" "=" <new-value> "WHERE" "key" "=" <key>
+    => "SET" <key> <new-value>
+
+/* Hash operations */
+<hash-update> ::= 
+    "UPDATE" <table> "__hash" "SET" <field> "=" <value> ["," <field2> "=" <value2>]... "WHERE" "key" "=" <key>
+    => "HSET" <key> <field> <value> [<field2> <value2>]...
+
+/* List operations */
+<list-update> ::= 
+    "UPDATE" <table> "__list" "SET" "value" "=" <new-value> "WHERE" "key" "=" <key> "AND" "index" "=" <index>
+    => "LSET" <key> <index> <new-value>
+
+/* Sorted Set operations */
+<zset-update> ::= 
+    "UPDATE" <table> "__zset" "SET" "score" "=" <new-score> "WHERE" "key" "=" <key> "AND" "member" "=" <member>
+    => "ZADD" <key> <new-score> <member>
+
+/* DELETE statement transformations */
+
+<delete-stmt> ::= 
+    "DELETE" "FROM" <table-name> "WHERE" <where-clause>
+    => <redis-delete-command>
+
+<redis-delete-command> ::=
+    <string-delete> | <hash-delete> | <list-delete> | <set-delete> | <zset-delete>
+
+/* String operations */
+<string-delete> ::= 
+    "DELETE" "FROM" <table> "WHERE" "key" "=" <key>
+    => "DEL" <key>
+
+/* Hash operations */
+<hash-delete> ::= 
+    "DELETE" "FROM" <table> "__hash" "WHERE" "key" "=" <key>
+    => "DEL" <key>
+  | "DELETE" "FROM" <table> "__hash" "WHERE" "key" "=" <key> "AND" "field" "=" <field>
+    => "HDEL" <key> <field>
+
+/* List operations */
+<list-delete> ::= 
+    "DELETE" "FROM" <table> "__list" "WHERE" "key" "=" <key>
+    => "DEL" <key>
+  | "DELETE" "FROM" <table> "__list" "WHERE" "key" "=" <key> "AND" "value" "=" <value>
+    => "LREM" <key> "0" <value>
+
+/* Set operations */
+<set-delete> ::= 
+    "DELETE" "FROM" <table> "__set" "WHERE" "key" "=" <key>
+    => "DEL" <key>
+  | "DELETE" "FROM" <table> "__set" "WHERE" "key" "=" <key> "AND" "member" "=" <member>
+    => "SREM" <key> <member>
+  | "DELETE" "FROM" <table> "__set" "WHERE" "key" "=" <key> "AND" "member" "IN" "(" <member1> ["," <member2>]... ")"
+    => "SREM" <key> <member1> [<member2>]...
+
+/* Sorted Set operations */
+<zset-delete> ::= 
+    "DELETE" "FROM" <table> "__zset" "WHERE" "key" "=" <key>
+    => "DEL" <key>
+  | "DELETE" "FROM" <table> "__zset" "WHERE" "key" "=" <key> "AND" "member" "=" <member>
+    => "ZREM" <key> <member>
+
+<general-set-function> ::=
+    <set-function-type> "(" [<set-quantifier>] <value-expression> ")"
+    => <set-function-implementation>
+
+<set-function-type> ::= "AVG" | "MAX" | "MIN" | "SUM" | "COUNT"
+    => <avg-implementation> | <max-implementation> | <min-implementation> | <sum-implementation> | <count-implementation>
+
+<avg-implementation> ::=
+    "local sum = 0; local count = 0;"
+    "for _,v in ipairs(group_records) do"
+    "  local val = " <value-expression-transform> ";"
+    "  if val ~= nil then"
+    "    sum = sum + val;"
+    "    count = count + 1;"
+    "  end"
+    "end"
+    "return count > 0 and (sum / count) or nil;"
+
+<max-implementation> ::=
+    "local max = nil;"
+    "for _,v in ipairs(group_records) do"
+    "  local val = " <value-expression-transform> ";"
+    "  if val ~= nil and (max == nil or val > max) then"
+    "    max = val;"
+    "  end"
+    "end"
+    "return max;"
+
+<min-implementation> ::=
+    "local min = nil;"
+    "for _,v in ipairs(group_records) do"
+    "  local val = " <value-expression-transform> ";"
+    "  if val ~= nil and (min == nil or val < min) then"
+    "    min = val;"
+    "  end"
+    "end"
+    "return min;"
+
+<sum-implementation> ::=
+    "local sum = 0;"
+    "for _,v in ipairs(group_records) do"
+    "  local val = " <value-expression-transform> ";"
+    "  if val ~= nil then"
+    "    sum = sum + val;"
+    "  end"
+    "end"
+    "return sum;"
+
+<count-implementation> ::=
+    "local count = 0;"
+    "for _,v in ipairs(group_records) do"
+    "  local val = " <value-expression-transform> ";"
+    "  if val ~= nil then"
+    "    count = count + 1;"
+    "  end"
+    "end"
+    "return count;"
+
+<statistical-function> ::=
+    "STDDEV_POP" "(" [<set-quantifier>] <value-expression> ")"
+  | "STDDEV_SAMP" "(" [<set-quantifier>] <value-expression> ")"
+  | "VAR_SAMP" "(" [<set-quantifier>] <value-expression> ")"
+  | "VAR_POP" "(" [<set-quantifier>] <value-expression> ")"
+  | "COVAR_POP" "(" <value-expression> "," <value-expression> ")"
+  | "COVAR_SAMP" "(" <value-expression> "," <value-expression> ")"
+  | "CORR" "(" <value-expression> "," <value-expression> ")"
+  | "REGR_SLOPE" "(" <value-expression> "," <value-expression> ")"
+  | "REGR_INTERCEPT" "(" <value-expression> "," <value-expression> ")"
+  | "REGR_COUNT" "(" <value-expression> "," <value-expression> ")"
+  | "REGR_R2" "(" <value-expression> "," <value-expression> ")"
+  | "REGR_AVGX" "(" <value-expression> "," <value-expression> ")"
+  | "REGR_AVGY" "(" <value-expression> "," <value-expression> ")"
+  | "REGR_SXX" "(" <value-expression> "," <value-expression> ")"
+  | "REGR_SYY" "(" <value-expression> "," <value-expression> ")"
+  | "REGR_SXY" "(" <value-expression> "," <value-expression> ")"
+    => <statistical-function-implementation>
+
+<window-function> ::=
+    <window-function-type> "(" [<value-expression>] ")" "OVER" <window-name-or-spec>
+    => <window-function-implementation>
+
+<window-function-type> ::=
+    <rank-function-type> | <frame-dependent-function>
+
+<rank-function-type> ::=
+    "RANK" | "DENSE_RANK" | "PERCENT_RANK" | "CUME_DIST" | "ROW_NUMBER" | "NTILE"
+
+<frame-dependent-function> ::=
+    <aggregate-function> | "FIRST_VALUE" | "LAST_VALUE" | "NTH_VALUE" | "LEAD" | "LAG"
+
+<window-name-or-spec> ::= <window-name> | <inline-window>
+
+<value-expression> ::=
+    <numeric-value-expression>
+  | <string-value-expression>
+  | <datetime-value-expression>
+  | <interval-value-expression>
+  | <boolean-value-expression>
+  | <case-expression>
+  | <cast-expression>
+  | <subquery>
+    => <value-expression-transform>
+
+<case-expression> ::=
+    "CASE" <case-operand> <case-when-clause> ["ELSE" <result>] "END"
+  | "CASE" <case-when-clause> ["ELSE" <result>] "END"
+    => <case-expression-transform>
+
+<case-expression-transform> ::=
+    "local case_value = " <case-operand-transform> ";"
+    "if " <case-condition-transform> " then"
+    "  return " <case-result-transform> ";"
+    "else"
+    "  return " <case-else-transform> ";"
+    "end"
+
+<case-when-clause> ::= 
+    "WHEN" <when-operand> "THEN" <result> ["WHEN" <when-operand> "THEN" <result>]...
+    => <case-when-transform>
+
+<cast-expression> ::= "CAST" "(" <value-expression> "AS" <data-type> ")"
+    => <cast-expression-transform>
+
+<cast-expression-transform> ::=
+    "local cast_value = " <value-expression-transform> ";"
+    <data-type-specific-casting>
+
+<data-type-specific-casting> ::=
+    <cast-to-number> | <cast-to-string> | <cast-to-boolean> | <cast-to-datetime>
+
+<cast-to-number> ::=
+    "return tonumber(cast_value);"
+
+<cast-to-string> ::=
+    "return tostring(cast_value);"
+
+<cast-to-boolean> ::=
+    "if cast_value == 0 or cast_value == '' or cast_value == nil then"
+    "  return false;"
+    "else"
+    "  return true;"
+    "end"
+
+<subquery> ::= "(" <select-stmt> ")"
+    => "(function() " <select-stmt-transform> " end)()"
+
+/* Date/Time Functions */
+
+<datetime-function> ::=
+    "CURRENT_DATE" ["(" ")"]
+  | "CURRENT_TIME" ["(" [<time-precision>] ")"]
+  | "CURRENT_TIMESTAMP" ["(" [<timestamp-precision>] ")"]
+  | "LOCALTIME" ["(" [<time-precision>] ")"]
+  | "LOCALTIMESTAMP" ["(" [<timestamp-precision>] ")"]
+  | "EXTRACT" "(" <extract-field> "FROM" <extract-source> ")"
+    => <datetime-function-implementation>
+
+<datetime-function-implementation> ::=
+    <current-date-implementation> | <current-time-implementation> | <current-timestamp-implementation> |
+    <localtime-implementation> | <localtimestamp-implementation> | <extract-implementation>
+
+<current-date-implementation> ::=
+    "local now = os.time();"
+    "local date_str = os.date('%Y-%m-%d', now);"
+    "return date_str;"
+
+<current-timestamp-implementation> ::=
+    "local now = os.time();"
+    "local timestamp_str = os.date('%Y-%m-%d %H:%M:%S', now);"
+    "return timestamp_str;"
+
+<extract-implementation> ::=
+    "local datetime = " <extract-source-transform> ";"
+    "local pattern = " <extract-field-pattern> ";"
+    "return tonumber(os.date(pattern, datetime));"
+
+/* String Functions */
+
+<string-function> ::=
+    "CHAR_LENGTH" "(" <string-value-expression> ")"
+  | "CHARACTER_LENGTH" "(" <string-value-expression> ")"
+  | "OCTET_LENGTH" "(" <string-value-expression> ")"
+  | "LOWER" "(" <string-value-expression> ")"
+  | "UPPER" "(" <string-value-expression> ")"
+  | "SUBSTRING" "(" <string-value-expression> "FROM" <start-position> ["FOR" <string-length>] ")"
+  | "TRIM" "(" [<trim-specification>] [<trim-character>] "FROM" <string-value-expression> ")"
+  | "OVERLAY" "(" <string-value-expression> "PLACING" <string-value-expression> "FROM" <start-position> ["FOR" <string-length>] ")"
+  | "CONCAT" "(" <string-value-expression> "," <string-value-expression> ["," <string-value-expression>]... ")"
+    => <string-function-implementation>
+
+<string-function-implementation> ::=
+    <char-length-implementation> | <octet-length-implementation> | <lower-implementation> | <upper-implementation> |
+    <substring-implementation> | <trim-implementation> | <overlay-implementation> | <concat-implementation>
+
+<char-length-implementation> ::=
+    "return string.len(" <string-value-expression-transform> ");"
+
+<lower-implementation> ::=
+    "return string.lower(" <string-value-expression-transform> ");"
+
+<upper-implementation> ::=
+    "return string.upper(" <string-value-expression-transform> ");"
+
+<substring-implementation> ::=
+    "local str = " <string-value-expression-transform> ";"
+    "local start_pos = " <start-position-transform> ";"
+    "local length = " <string-length-transform> ";"
+    "return string.sub(str, start_pos, start_pos + length - 1);"
+
+<concat-implementation> ::=
+    "return " <string-value-expression-transform> " .. " <string-value-expression-transform>
+    [" .. " <string-value-expression-transform>]... ";"
+
+/* Numeric Functions */
+
+<numeric-function> ::=
+    "ABS" "(" <numeric-value-expression> ")"
+  | "MOD" "(" <numeric-value-expression> "," <numeric-value-expression> ")"
+  | "POWER" "(" <numeric-value-expression> "," <numeric-value-expression> ")"
+  | "SQRT" "(" <numeric-value-expression> ")"
+  | "FLOOR" "(" <numeric-value-expression> ")"
+  | "CEIL" "(" <numeric-value-expression> ")"
+  | "CEILING" "(" <numeric-value-expression> ")"
+  | "EXP" "(" <numeric-value-expression> ")"
+  | "LN" "(" <numeric-value-expression> ")"
+  | "LOG10" "(" <numeric-value-expression> ")"
+  | "ROUND" "(" <numeric-value-expression> ["," <scale>] ")"
+    => <numeric-function-implementation>
+
+<numeric-function-implementation> ::=
+    <abs-implementation> | <mod-implementation> | <power-implementation> | <sqrt-implementation> |
+    <floor-implementation> | <ceil-implementation> | <exp-implementation> | <ln-implementation> |
+    <log10-implementation> | <round-implementation>
+
+<abs-implementation> ::=
+    "return math.abs(" <numeric-value-expression-transform> ");"
+
+<mod-implementation> ::=
+    "return " <numeric-value-expression-transform> " % " <numeric-value-expression-transform> ";"
+
+<power-implementation> ::=
+    "return math.pow(" <numeric-value-expression-transform> ", " <numeric-value-expression-transform> ");"
+
+<sqrt-implementation> ::=
+    "return math.sqrt(" <numeric-value-expression-transform> ");"
+
+<floor-implementation> ::=
+    "return math.floor(" <numeric-value-expression-transform> ");"
+
+<ceil-implementation> ::=
+    "return math.ceil(" <numeric-value-expression-transform> ");"
+
+<exp-implementation> ::=
+    "return math.exp(" <numeric-value-expression-transform> ");"
+
+<round-implementation> ::=
+    "local num = " <numeric-value-expression-transform> ";"
+    "local scale = " <scale-transform> " or 0;"
+    "local mult = 10 ^ scale;"
+    "return math.floor(num * mult + 0.5) / mult;"
+
+/* Redis-specific transformations for high-level SQL to Redis/Lua conversion */
+
+<redis-key-transform> ::= 
+    "'" <schema-name> ":" <identifier> "'"
+  | "'" <identifier> "'"
+    => <schema-name-transform> .. ":" .. <identifier-transform>
+    | <identifier-transform>
+
+<pattern-transform> ::=
+    <pattern-string>
+    => "string.gsub(string.gsub(string.gsub(" <pattern-string-transform> ", '%%', '%%%%'), '_', '.'), '%%', '.*')"
+
+<in-value-list-transform> ::= 
+    <value-expr-1> ["," <value-expr-2>]...
+    => <value-expr-1-transform> [", " <value-expr-2-transform>]...
+
+<multi-column-sort-logic> ::=
+    "if a['" <sort-column-1> "'] ~= b['" <sort-column-1> "'] then"
+    "  return " [<sort-direction-1>] "a['" <sort-column-1> "'] " <sort-operator-1> " b['" <sort-column-1> "'];"
+    "end"
+    ["if a['" <sort-column-2> "'] ~= b['" <sort-column-2> "'] then"
+    "  return " [<sort-direction-2>] "a['" <sort-column-2> "'] " <sort-operator-2> " b['" <sort-column-2> "'];"
+    "end"]...
+    "return false;"
+
+<sort-operator-1> ::= "<" | ">"
+    => < | >
+
+<sort-direction-1> ::= "ASC" | "DESC"
+    => "" | "not "
+
+<partition-key-generation> ::=
+    "table.concat({" <partition-column-transform> ["," <partition-column-transform>]... "}, '|')"
+
+<grouping-key-generation> ::=
+    "table.concat({" <grouping-column-transform> ["," <grouping-column-transform>]... "}, '|')"
+
+/* Special handling for complex joins and analytics in Redis */
+
+<redis-join-key-processing> ::=
+    "local left_keys = redis.call('KEYS', " <left-pattern-transform> ");"
+    "local right_keys = redis.call('KEYS', " <right-pattern-transform> ");"
+    "local left_data = {};"
+    "local right_data = {};"
+    "for i,key in ipairs(left_keys) do"
+    "  table.insert(left_data, {key=key, data=" <left-key-data-extraction> "});"
+    "end"
+    "for i,key in ipairs(right_keys) do"
+    "  table.insert(right_data, {key=key, data=" <right-key-data-extraction> "});"
+    "end"
+    <join-processing>
+
+<left-key-data-extraction> ::=
+    <redis-hash-key-extraction> | <redis-list-key-extraction> | <redis-set-key-extraction> | <redis-zset-key-extraction>
+
+<redis-hash-key-extraction> ::=
+    "redis.call('HGETALL', key)"
+
+<redis-list-key-extraction> ::=
+    "redis.call('LRANGE', key, 0, -1)"
+
+<redis-set-key-extraction> ::=
+    "redis.call('SMEMBERS', key)"
+
+<redis-zset-key-extraction> ::=
+    "redis.call('ZRANGEBYSCORE', key, '-inf', '+inf', 'WITHSCORES')"
+
+<join-processing> ::=
+    <inner-join-processing> | <left-join-processing> | <right-join-processing> | <full-join-processing>
+
+<inner-join-processing> ::=
+    "local results = {};"
+    "for i,left_rec in ipairs(left_data) do"
+    "  for j,right_rec in ipairs(right_data) do"
+    "    if " <join-condition> " then"
+    "      table.insert(results, " <joined-record-construction> ");"
+    "    end"
+    "  end"
+    "end"
+    "return results;"
+
+<left-join-processing> ::=
+    "local results = {};"
+    "for i,left_rec in ipairs(left_data) do"
+    "  local matched = false;"
+    "  for j,right_rec in ipairs(right_data) do"
+    "    if " <join-condition> " then"
+    "      matched = true;"
+    "      table.insert(results, " <joined-record-construction> ");"
+    "    end"
+    "  end"
+    "  if not matched then"
+    "    table.insert(results, " <left-record-with-nulls> ");"
+    "  end"
+    "end"
+    "return results;"
+
+/* Complex analytics using Redis modules or Lua scripts */
+
+<redis-timeseries-transform> ::=
+    "SELECT" <agg-function> "(" <value-column> ")" "FROM" <table> "__ts"
+    "WHERE" "key" "=" <ts-key>
+    ["AND" "timestamp" <time-range>]
+    ["GROUP BY" <time-bucket>]
+    => <redis-timeseries-function>
+
+<redis-timeseries-function> ::=
+    "redis.call('TS.RANGE', " <ts-key-transform> ", " <start-time-transform> ", " <end-time-transform>
+    [", AGGREGATION " <agg-function-transform> " " <time-bucket-transform>] ")"
+
+<redis-search-transform> ::=
+    "SELECT" <field-list> "FROM" <table>
+    "WHERE" <full-text-condition>
+    ["LIMIT" <offset> "," <count>]
+    => <redis-search-function>
+
+<redis-search-function> ::=
+    "redis.call('FT.SEARCH', " <index-transform> ", " <query-transform> 
+    [", LIMIT " <offset-transform> " " <count-transform>]
+    [", RETURN " <return-fields-transform>] ")"
+
+<redis-graph-transform> ::=
+    "SELECT" <field-list> "FROM" <graph>
+    "MATCH" <graph-pattern>
+    ["WHERE" <graph-condition>]
+    ["RETURN" <graph-return>]
+    ["ORDER BY" <graph-sort>]
+    ["LIMIT" <graph-limit>]
+    => <redis-graph-function>
+
+<redis-graph-function> ::=
+    "redis.call('GRAPH.QUERY', " <graph-transform> ", \"" <cypher-query-transform> "\")"
+
+/* Conversion of SQL data types to Redis/Lua types */
+
+<sql-to-redis-type-conversion> ::=
+    <sql-string-type> | <sql-numeric-type> | <sql-datetime-type> | <sql-boolean-type> | <sql-complex-type>
+
+<sql-string-type> ::= "CHAR" | "VARCHAR" | "TEXT" | "NCHAR" | "NVARCHAR" | "NTEXT"
+    => "string"
+
+<sql-numeric-type> ::= "INTEGER" | "SMALLINT" | "BIGINT" | "DECIMAL" | "NUMERIC" | "REAL" | "DOUBLE PRECISION" | "FLOAT"
+    => "number"
+
+<sql-datetime-type> ::= "DATE" | "TIME" | "TIMESTAMP" | "INTERVAL"
+    => "number" /* Unix timestamp */
+
+<sql-boolean-type> ::= "BOOLEAN"
+    => "boolean"
+
+<sql-complex-type> ::= "ARRAY" | "MULTISET" | "ROW" | "JSON"
+    => "table" /* Lua table */
+
+/* Common Table Expressions (WITH Clause) */
+<with-clause> ::= 
+    "WITH" <common-table-expression> ["," <common-table-expression>]...
+
+<common-table-expression> ::=
+    <table-name> ["(" <column-name> ["," <column-name>]... ")"] "AS" "(" <query-expression> ")"
+
+<query-expression> ::= 
+    [<with-clause>] <select-stmt> [<set-operation> <query-expression>]
+
+<set-operation> ::= "UNION" ["ALL"] | "EXCEPT" | "INTERSECT"
+
+/* Extended Window Functions */
+<window-name-or-spec> ::= <window-name> | <inline-window>
+
+<inline-window> ::= "(" <window-spec> ")"
+
+<window-spec> ::= 
+    [<existing-window-name>]
+    [<partition-clause>]
+    [<order-clause>]
+    [<frame-clause>]
+
+<partition-clause> ::= "PARTITION" "BY" <expression> ["," <expression>]...
+
+<order-clause> ::= "ORDER" "BY" <sort-specification> ["," <sort-specification>]...
+
+<frame-clause> ::= 
+    <frame-units> <frame-extent> [<frame-exclusion>]
+
+<frame-units> ::= "ROWS" | "RANGE" | "GROUPS"
+
+<frame-extent> ::= 
+    "UNBOUNDED" "PRECEDING" |
+    <expression> "PRECEDING" |
+    "CURRENT" "ROW" |
+    "BETWEEN" <frame-bound> "AND" <frame-bound>
+
+<frame-bound> ::= 
+    "UNBOUNDED" "PRECEDING" |
+    <expression> "PRECEDING" |
+    "CURRENT" "ROW" |
+    <expression> "FOLLOWING" |
+    "UNBOUNDED" "FOLLOWING"
+
+<frame-exclusion> ::= 
+    "EXCLUDE" "CURRENT" "ROW" |
+    "EXCLUDE" "GROUP" |
+    "EXCLUDE" "TIES" |
+    "EXCLUDE" "NO" "OTHERS"
+
+/* Advanced GROUP BY Extensions */
+<group-by-clause> ::= 
+    "GROUP" "BY" <grouping-element> ["," <grouping-element>]...
+
+<grouping-element> ::= 
+    <expression> |
+    "ROLLUP" "(" <expression> ["," <expression>]... ")" |
+    "CUBE" "(" <expression> ["," <expression>]... ")" |
+    "GROUPING" "SETS" "(" <grouping-set> ["," <grouping-set>]... ")"
+
+<grouping-set> ::= 
+    <expression> |
+    "(" <expression> ["," <expression>]... ")" |
+    "()"
+
+/* Advanced JOIN Types */
+<join-type> ::=
+    "INNER" |
+    "LEFT" ["OUTER"] |
+    "RIGHT" ["OUTER"] |
+    "FULL" ["OUTER"] |
+    "CROSS"
+
+<join-spec> ::= 
+    <table-expression> <join-type> "JOIN" <table-expression> ["ON" <condition>]
+
+/* PIVOT and UNPIVOT */
+<pivot-clause> ::=
+    "PIVOT" "(" <pivot-aggregate> "FOR" <pivot-column> "IN" "(" <pivot-value-list> ")" ")"
+
+<unpivot-clause> ::=
+    "UNPIVOT" ["(" <unpivot-nulls-option> ")"] "(" <value-column> "FOR" <name-column> "IN" "(" <unpivot-column-list> ")" ")"
+
+/* Subquery definitions */
+
+/* 1. Scalar Subquery (returns a single value) */
+<scalar-subquery> ::= "(" <select-stmt> ")"
+
+/* 2. Row Subquery (returns a single row) */
+<row-subquery> ::= "(" <select-stmt> ")"
+
+/* 3. Table Subquery (returns a result set) */
+<table-subquery> ::= "(" <select-stmt> ")"
+
+/* Where subqueries can be used */
+
+/* In value expressions */
+<value-expression> ::= 
+    <numeric-value-expression> |
+    <string-value-expression> |
+    <datetime-value-expression> |
+    <scalar-subquery> |     /* Subquery used as a value */
+    ...
+
+/* In predicates */
+<predicate> ::=
+    <comparison-predicate> |
+    <in-predicate> |
+    <exists-predicate> |
+    ...
+
+/* Comparison predicates with subqueries */
+<comparison-predicate> ::=
+    <value-expression> <comparison-operator> <value-expression> |
+    <value-expression> <comparison-operator> ["ALL" | "ANY" | "SOME"] <table-subquery>
+
+/* IN predicates with subqueries */
+<in-predicate> ::=
+    <value-expression> ["NOT"] "IN" "(" <value-list> ")" |
+    <value-expression> ["NOT"] "IN" <table-subquery>
+
+/* EXISTS predicates */
+<exists-predicate> ::=
+    ["NOT"] "EXISTS" <table-subquery>
+
+/* FROM clause with subqueries (derived tables) */
+<table-reference> ::=
+    <table-name> |
+    <table-subquery> ["AS"] <correlation-name> ["(" <derived-column-list> ")"] |
+    ...
+
+/* Subqueries in INSERT */
+<insert-source> ::=
+    "VALUES" "(" <value-list> ")" |
+    <select-stmt>           /* INSERT via subquery */
+
+/* Subqueries in UPDATE */
+<update-set-value> ::=
+    <value-expression> |
+    <scalar-subquery>       /* UPDATE field value via subquery */
+
+/* Subqueries in DELETE */
+<delete-predicate> ::=
+    <predicate>             /* Can contain subqueries */

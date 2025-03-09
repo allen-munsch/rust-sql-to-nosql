@@ -1,0 +1,158 @@
+// pattern/set_ops.rs - SET operation pattern matchers
+// Declarative patterns for matching SQL SET operations (UNION, INTERSECT, EXCEPT)
+
+use sqlparser::ast::{
+    Query, SetExpr, SetOperator, Statement
+};
+use std::marker::PhantomData;
+
+use super::combinators::{Pattern, MatchResult, extract, map, and_then, or};
+
+/// Types of SET operations
+#[derive(Debug, Clone, PartialEq)]
+pub enum SetOpType {
+    Union,
+    Intersect,
+    Except,
+}
+
+/// Information about a SET operation
+#[derive(Debug, Clone)]
+pub struct SetOpInfo {
+    /// Type of SET operation
+    pub op_type: SetOpType,
+    /// Left query
+    pub left: Box<SetExpr>,
+    /// Right query
+    pub right: Box<SetExpr>,
+    /// Whether to include duplicates (ALL)
+    pub all: bool,
+}
+
+/// Pattern that matches a statement with a SET operation
+pub fn set_operation() -> impl Pattern<Statement, SetOpInfo> {
+    extract(|stmt: &Statement| {
+        match stmt {
+            Statement::Query(query) => {
+                match &query.body {
+                    SetExpr::SetOperation { op, left, right, all } => {
+                        let op_type = match op {
+                            SetOperator::Union => SetOpType::Union,
+                            SetOperator::Intersect => SetOpType::Intersect,
+                            SetOperator::Except => SetOpType::Except,
+                        };
+                        
+                        Some(SetOpInfo {
+                            op_type,
+                            left: left.clone(),
+                            right: right.clone(),
+                            all: *all,
+                        })
+                    },
+                    _ => None,
+                }
+            },
+            _ => None,
+        }
+    })
+}
+
+/// Pattern that matches a UNION operation
+pub fn union_op() -> impl Pattern<Statement, SetOpInfo> {
+    extract(|stmt: &Statement| {
+        match set_operation().match_pattern(stmt) {
+            Ok(info) if info.op_type == SetOpType::Union => Some(info),
+            _ => None,
+        }
+    })
+}
+
+/// Pattern that matches an INTERSECT operation
+pub fn intersect_op() -> impl Pattern<Statement, SetOpInfo> {
+    extract(|stmt: &Statement| {
+        match set_operation().match_pattern(stmt) {
+            Ok(info) if info.op_type == SetOpType::Intersect => Some(info),
+            _ => None,
+        }
+    })
+}
+
+/// Pattern that matches an EXCEPT operation
+pub fn except_op() -> impl Pattern<Statement, SetOpInfo> {
+    extract(|stmt: &Statement| {
+        match set_operation().match_pattern(stmt) {
+            Ok(info) if info.op_type == SetOpType::Except => Some(info),
+            _ => None,
+        }
+    })
+}
+
+/// Extract the individual queries from a SET operation
+pub fn extract_queries_from_set_op(set_op: &SetOpInfo) -> (Box<Query>, Box<Query>) {
+    // Extract the actual SELECT queries from each side of the SET operation
+    let left_query = extract_query_from_set_expr(&set_op.left);
+    let right_query = extract_query_from_set_expr(&set_op.right);
+    
+    (left_query, right_query)
+}
+
+/// Extract a Query from a SetExpr
+fn extract_query_from_set_expr(set_expr: &SetExpr) -> Box<Query> {
+    match set_expr {
+        SetExpr::Select(select) => {
+            // Create a new Query with just this SELECT
+            Box::new(Query {
+                with: None,
+                body: Box::new(SetExpr::Select(select.clone())),
+                order_by: Vec::new(),
+                limit: None,
+                offset: None,
+                fetch: None,
+                locks: Vec::new(),
+                limit_by: Vec::new(),
+                selection: None,
+            })
+        },
+        SetExpr::Query(query) => {
+            query.clone()
+        },
+        SetExpr::SetOperation { left, right, op, all } => {
+            // Recursively get the left side (arbitrarily choose left for nested set ops)
+            extract_query_from_set_expr(left)
+        },
+        _ => {
+            // Create an empty query as fallback
+            Box::new(Query {
+                with: None,
+                body: Box::new(SetExpr::Values(
+                    sqlparser::ast::Values(Vec::new())
+                )),
+                order_by: Vec::new(),
+                limit: None,
+                offset: None,
+                fetch: None,
+                locks: Vec::new(),
+                limit_by: Vec::new(),
+                selection: None,
+            })
+        },
+    }
+}
+
+/// Check if two queries have compatible columns for a SET operation
+pub fn are_set_op_compatible(left: &Query, right: &Query) -> bool {
+    // Extract column count from both queries
+    let left_cols = extract_column_count(left);
+    let right_cols = extract_column_count(right);
+    
+    // In a SET operation, both queries must have the same number of columns
+    left_cols == right_cols && left_cols > 0
+}
+
+/// Extract the number of columns in a query's result set
+fn extract_column_count(query: &Query) -> usize {
+    match &query.body {
+        SetExpr::Select(select) => {
+            select.projection.len()
+        },
+        Set

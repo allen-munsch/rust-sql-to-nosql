@@ -1,0 +1,1 @@
+LREM {{ key }} 0 {{ value }}

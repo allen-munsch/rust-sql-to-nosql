@@ -1,0 +1,1 @@
+HSET {{ key }} {{ field_values }}

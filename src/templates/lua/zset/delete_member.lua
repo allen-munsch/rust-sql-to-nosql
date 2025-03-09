@@ -1,0 +1,1 @@
+ZREM {{ key }} {{ member }}

@@ -1,6 +1,7 @@
 # rust-sql-to-nosql
 
-An exploration of a lua based BNF grammar for redis, could through effort be modified to cover any nosql grammar.
+An exploration/rough-sketch of a lua based BNF grammar for redis, could through effort be modified to cover any nosql grammar.
+- https://github.com/allen-munsch/rust-sql-to-nosql/blob/main/redis.sql.bnf
 
 ## Overview
 

@@ -14,18 +14,39 @@ pub use insert::create_insert_rules;
 pub use update::create_update_rules;
 pub use delete::create_delete_rules;
 
+
+// Update the Rule trait in src/rules/mod.rs to include a description method
+
 /// A Rule defines how a SQL pattern maps to a Redis command via a template
 pub trait Rule {
     fn matches(&self, stmt: &Statement) -> bool;
     fn get_context(&self, stmt: &Statement) -> Option<TemplateContext>;
     fn get_template_name(&self) -> &str;
+    
+    /// Returns the function name used for matching
+    fn get_matcher_name(&self) -> Option<&str> {
+        None // Default implementation returns None
+    }
+    
+    /// Returns the SQL pattern description
+    fn get_sql_pattern(&self) -> Option<&str> {
+        None // Default implementation returns None
+    }
+    
+    /// Returns the Redis command pattern
+    fn get_redis_pattern(&self) -> Option<&str> {
+        None // Default implementation returns None
+    }
 }
 
-/// A generic rule implementation that combines a matcher function with a context builder
+// Update GenericRule to include more metadata
 pub struct GenericRule<F> {
     matcher: F,
     context_builder: Box<dyn ContextBuilder>,
     template_name: String,
+    matcher_name: Option<String>,
+    sql_pattern: Option<String>,
+    redis_pattern: Option<String>,
 }
 
 impl<F> GenericRule<F> 
@@ -37,7 +58,25 @@ where
             matcher,
             context_builder,
             template_name: template_name.to_string(),
+            matcher_name: None,
+            sql_pattern: None,
+            redis_pattern: None,
         }
+    }
+    
+    pub fn with_matcher_name(mut self, name: &str) -> Self {
+        self.matcher_name = Some(name.to_string());
+        self
+    }
+    
+    pub fn with_sql_pattern(mut self, pattern: &str) -> Self {
+        self.sql_pattern = Some(pattern.to_string());
+        self
+    }
+    
+    pub fn with_redis_pattern(mut self, pattern: &str) -> Self {
+        self.redis_pattern = Some(pattern.to_string());
+        self
     }
 }
 
@@ -55,6 +94,18 @@ where
     
     fn get_template_name(&self) -> &str {
         &self.template_name
+    }
+    
+    fn get_matcher_name(&self) -> Option<&str> {
+        self.matcher_name.as_deref()
+    }
+    
+    fn get_sql_pattern(&self) -> Option<&str> {
+        self.sql_pattern.as_deref()
+    }
+    
+    fn get_redis_pattern(&self) -> Option<&str> {
+        self.redis_pattern.as_deref()
     }
 }
 

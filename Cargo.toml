@@ -11,8 +11,10 @@ keywords = ["redis", "sql", "database", "transformation", "parser"]
 categories = ["database"]
 
 [dependencies]
+clap = { version = "4.5.31", features = ["derive", "cargo"] }
 sqlparser = "0.55.0"
 tera = "1.20.0"
+tracing = "0.1.41"
 
 [[example]]
 name = "pattern_match"

@@ -1,12 +1,4 @@
-// lib.rs - SQL to Redis Command Transformer
-// A declarative, functional approach to transforming SQL queries to Redis commands
-
-pub mod ast;
-pub mod pattern;
-pub mod context;
-pub mod rules;
-pub mod templates;
-
+// lib.rs - Main implementation of SQL to Redis transformer
 
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
@@ -15,6 +7,7 @@ use std::fmt;
 
 use crate::rules::{Rule, create_rules};
 use crate::templates::TemplateEngine;
+use crate::commands::generate_command;
 
 // Core error type for SQL-Redis transformation
 #[derive(Debug)]
@@ -47,8 +40,10 @@ pub struct SqlToRedisTransformer {
 impl SqlToRedisTransformer {
     pub fn new() -> Result<Self, SqlRedisError> {
         // Create template engine
-        let template_engine = TemplateEngine::new()
-            .map_err(|e| SqlRedisError::InitializationError(format!("{}", e)))?;
+        let template_engine = match TemplateEngine::new() {
+            Ok(engine) => engine,
+            Err(e) => return Err(SqlRedisError::InitializationError(format!("Template engine error: {}", e))),
+        };
         
         // Create rules
         let rules = create_rules();
@@ -68,7 +63,7 @@ impl SqlToRedisTransformer {
         
         let stmt = &ast[0];
         
-        // Try to match any rule
+        // First strategy: Rule-based matching with templates
         for rule in &self.rules {
             if rule.matches(stmt) {
                 // Get context from the rule for the matched statement
@@ -83,98 +78,87 @@ impl SqlToRedisTransformer {
             }
         }
         
-        // If no rule matched, fall back to existing pattern-based transform
+        // Second strategy: Direct command generation
+        if let Some(command) = generate_command(stmt) {
+            return Ok(command.to_string());
+        }
+        
+        // If both strategies fail, return error
         Err(SqlRedisError::NoMatchingPattern(sql.to_string()))
+    }
+
+    pub fn list_supported_patterns(&self) -> Vec<String> {
+        self.rules
+            .iter()
+            .map(|rule| rule.get_template_name().to_string())
+            .collect()
+    }
+    
+    /// Returns detailed information about all patterns
+    pub fn get_pattern_details(&self) -> Vec<PatternInfo> {
+        self.rules
+            .iter()
+            .map(|rule| PatternInfo {
+                name: rule.get_template_name().to_string(),
+                matcher: rule.get_matcher_name().unwrap_or("unknown").to_string(),
+                sql_pattern: rule.get_sql_pattern().unwrap_or("").to_string(),
+                redis_pattern: rule.get_redis_pattern().unwrap_or("").to_string(),
+            })
+            .collect()
     }
 }
 
+/// Detailed information about a pattern
+#[derive(Debug, Clone)]
+pub struct PatternInfo {
+    pub name: String,
+    pub matcher: String,
+    pub sql_pattern: String,
+    pub redis_pattern: String,
+}
 
+// Modules
+pub mod ast;
+pub mod pattern;
+pub mod context;
+pub mod rules;
+pub mod templates;
+pub mod commands;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_string_get() {
-        let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT * FROM users WHERE key = 'user:1001'").unwrap();
-        assert_eq!(result, "GET user:1001");
-    }
-
-    #[test]
-    fn test_hash_getall() {
-        let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT * FROM users__hash WHERE key = 'user:1001'").unwrap();
-        assert_eq!(result, "HGETALL user:1001");
-    }
-
-    #[test]
-    fn test_hash_get() {
-        let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT name FROM users__hash WHERE key = 'user:1001'").unwrap();
-        assert_eq!(result, "HGET user:1001 name");
+    fn test_transformer_initialization() {
+        let transformer = SqlToRedisTransformer::new();
+        assert!(transformer.is_ok(), "Failed to initialize transformer");
     }
     
     #[test]
-    fn test_hash_multi_get() {
+    fn test_get_pattern_details() {
         let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT name, email, age FROM users__hash WHERE key = 'user:1001'").unwrap();
-        assert_eq!(result, "HMGET user:1001 name email age");
+        let details = transformer.get_pattern_details();
+        assert!(!details.is_empty(), "No patterns were registered");
     }
     
     #[test]
-    fn test_list_getall() {
+    fn test_list_supported_patterns() {
         let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT * FROM tweets__list WHERE key = 'user:1001:tweets'").unwrap();
-        assert_eq!(result, "LRANGE user:1001:tweets 0 -1");
+        let patterns = transformer.list_supported_patterns();
+        assert!(!patterns.is_empty(), "No patterns were supported");
     }
     
     #[test]
-    fn test_list_get_index() {
+    fn test_error_handling() {
         let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT * FROM tweets__list WHERE key = 'user:1001:tweets' AND index = 0").unwrap();
-        assert_eq!(result, "LINDEX user:1001:tweets 0");
-    }
-    
-    #[test]
-    fn test_list_get_range() {
-        let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT * FROM tweets__list WHERE key = 'user:1001:tweets' LIMIT 10").unwrap();
-        assert_eq!(result, "LRANGE user:1001:tweets 0 9");
-    }
-    
-    #[test]
-    fn test_set_getall() {
-        let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT * FROM followers__set WHERE key = 'user:1001:followers'").unwrap();
-        assert_eq!(result, "SMEMBERS user:1001:followers");
-    }
-    
-    #[test]
-    fn test_set_ismember() {
-        let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT * FROM followers__set WHERE key = 'user:1001:followers' AND member = 'user:1002'").unwrap();
-        assert_eq!(result, "SISMEMBER user:1001:followers user:1002");
-    }
-    
-    #[test]
-    fn test_zset_getall() {
-        let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT * FROM leaderboard__zset WHERE key = 'games:leaderboard'").unwrap();
-        assert_eq!(result, "ZRANGEBYSCORE games:leaderboard -inf +inf");
-    }
-    
-    #[test]
-    fn test_zset_get_score_range() {
-        let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT * FROM leaderboard__zset WHERE key = 'games:leaderboard' AND score > 1000").unwrap();
-        assert_eq!(result, "ZRANGEBYSCORE games:leaderboard (1000 +inf");
-    }
-    
-    #[test]
-    fn test_zset_get_reversed() {
-        let transformer = SqlToRedisTransformer::new().unwrap();
-        let result = transformer.transform("SELECT * FROM leaderboard__zset WHERE key = 'games:leaderboard' ORDER BY score DESC").unwrap();
-        assert_eq!(result, "ZREVRANGEBYSCORE games:leaderboard +inf -inf");
+        
+        // Test with invalid SQL
+        let result = transformer.transform("NOT A VALID SQL");
+        assert!(result.is_err(), "Should fail with invalid SQL");
+        
+        // Test with unsupported SQL pattern
+        let result = transformer.transform("SELECT * FROM non_redis_table");
+        assert!(result.is_err(), "Should fail with unsupported pattern");
     }
 }

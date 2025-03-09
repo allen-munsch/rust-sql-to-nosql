@@ -140,4 +140,3 @@ pub fn extract_set_ismember(stmt: &Statement) -> Option<SetMemberInfo> {
     }
     None
 }
-

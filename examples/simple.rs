@@ -3,7 +3,7 @@ use sql_redis::SqlToRedisTransformer;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a transformer - the constructor doesn't return a Result
-    let transformer = SqlToRedisTransformer::new();
+    // let transformer = SqlToRedisTransformer::new();
     
     // Define a list of SQL queries based on our BNF grammar
     let examples = vec![

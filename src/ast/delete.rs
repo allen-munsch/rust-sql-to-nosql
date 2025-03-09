@@ -32,38 +32,45 @@ pub fn get_table_name(stmt: &Statement) -> Option<String> {
     }
 }
 
-/// Get key condition from WHERE clause
 pub fn get_key_value(stmt: &Statement) -> Option<String> {
     match stmt {
         Statement::Delete(delete) => {
-            delete.selection.as_ref().and_then(|expr| {
-                match expr {
-                    Expr::BinaryOp { left, op, right } => {
-                        if *op != sqlparser::ast::BinaryOperator::Eq {
-                            return None;
-                        }
-                        
-                        match &**left {
-                            Expr::Identifier(ident) if ident.value.to_lowercase() == "key" => {
-                                match &**right {
-                                    Expr::Value(value_with_span) => match &value_with_span.value {
-                                        Value::SingleQuotedString(s) | Value::DoubleQuotedString(s) => Some(s.clone()),
-                                        Value::Number(n, _) => Some(n.clone()),
-                                        _ => None,
-                                    },
-                                    _ => None,
-                                }
-                            }
-                            _ => None,
-                        }
-                    },
-                    _ => None,
-                }
-            })
-        },
+            delete.selection.as_ref().and_then(|expr| extract_key_value(expr))
+        }
         _ => None,
     }
 }
+
+
+/// Recursively search for `key = <value>` in the WHERE clause
+fn extract_key_value(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::BinaryOp { left, op, right } => {
+            if *op == sqlparser::ast::BinaryOperator::Eq {
+                match &**left {
+                    Expr::Identifier(ident) if ident.value.to_lowercase() == "key" => {
+                        match &**right {
+                            Expr::Value(value_with_span) => match &value_with_span.value {
+                                Value::SingleQuotedString(s) | Value::DoubleQuotedString(s) => Some(s.clone()),
+                                Value::Number(n, _) => Some(n.clone()),
+                                _ => None,
+                            },
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                }
+            } else if *op == sqlparser::ast::BinaryOperator::And {
+                // If it's an AND operator, search in both sides for the key condition
+                extract_key_value(left).or_else(|| extract_key_value(right))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 
 /// Get field condition from WHERE clause
 pub fn get_field_filter(stmt: &Statement, field_name: &str) -> Option<String> {

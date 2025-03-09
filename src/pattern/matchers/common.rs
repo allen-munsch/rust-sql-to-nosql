@@ -280,64 +280,73 @@ pub fn score_range() -> impl Pattern<Expr, (String, String)> {
     extract(|expr: &Expr| {
         match expr {
             Expr::BinaryOp { left, op, right } => {
-                match &**left {
-                    Expr::Identifier(ident) if ident.value.to_lowercase() == "score" => {
+                // Direct score comparison
+                if let Expr::Identifier(ident) = &**left {
+                    if ident.value.to_lowercase() == "score" {
                         match op {
                             sqlparser::ast::BinaryOperator::Gt => {
                                 if let Expr::Value(value_with_span) = &**right {
                                     if let sqlparser::ast::Value::Number(n, _) = &value_with_span.value {
-                                        Some((format!("({}", n), "+inf".to_string()))
-                                    } else {
-                                        None
+                                        return Some((format!("({}",n), "+inf".to_string()));
                                     }
-                                } else {
-                                    None
                                 }
                             },
                             sqlparser::ast::BinaryOperator::GtEq => {
                                 if let Expr::Value(value_with_span) = &**right {
                                     if let sqlparser::ast::Value::Number(n, _) = &value_with_span.value {
-                                        Some((n.clone(), "+inf".to_string()))
-                                    } else {
-                                        None
+                                        return Some((n.clone(), "+inf".to_string()));
                                     }
-                                } else {
-                                    None
                                 }
                             },
                             sqlparser::ast::BinaryOperator::Lt => {
                                 if let Expr::Value(value_with_span) = &**right {
                                     if let sqlparser::ast::Value::Number(n, _) = &value_with_span.value {
-                                        Some(("-inf".to_string(), format!("({}",n)))
-                                    } else {
-                                        None
+                                        return Some(("-inf".to_string(), format!("({}",n)));
                                     }
-                                } else {
-                                    None
                                 }
                             },
                             sqlparser::ast::BinaryOperator::LtEq => {
                                 if let Expr::Value(value_with_span) = &**right {
                                     if let sqlparser::ast::Value::Number(n, _) = &value_with_span.value {
-                                        Some(("-inf".to_string(), n.clone()))
-                                    } else {
-                                        None
+                                        return Some(("-inf".to_string(), n.clone()));
                                     }
-                                } else {
-                                    None
                                 }
                             },
-                            _ => None,
+                            _ => {}
                         }
-                    },
-                    _ => None,
+                    }
+                }
+                
+                // AND conditions - properly unwrap Results to Options
+                if *op == sqlparser::ast::BinaryOperator::And {
+                    // First check if one side has a key condition and the other has a score condition
+                    let left_has_key = key_equals().match_pattern(left).is_ok();
+                    let right_has_key = key_equals().match_pattern(right).is_ok();
+                    
+                    let left_score_result = score_range().match_pattern(left);
+                    let right_score_result = score_range().match_pattern(right);
+                    
+                    if left_has_key && right_score_result.is_ok() {
+                        return Some(right_score_result.unwrap());
+                    }
+                    
+                    if right_has_key && left_score_result.is_ok() {
+                        return Some(left_score_result.unwrap());
+                    }
+                    
+                    // Also check for compound score conditions (though not common in this use case)
+                    if left_score_result.is_ok() && right_score_result.is_ok() {
+                        let (min1, _) = left_score_result.unwrap();
+                        let (_, max2) = right_score_result.unwrap();
+                        return Some((min1, max2));
+                    }
                 }
             },
-            _ => None,
+            _ => {}
         }
+        None
     })
- }
-
+}
 
 /// Pattern that matches an ORDER BY score DESC clause
 pub fn order_by_score_desc() -> impl Pattern<Query, ()> {

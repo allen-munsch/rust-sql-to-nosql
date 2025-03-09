@@ -1,6 +1,5 @@
 // matchers/delete.rs - Predicate functions for DELETE statement pattern matching
 // Each function tests if a statement matches a particular DELETE pattern from the BNF grammar
-
 use sqlparser::ast::Statement;
 use crate::ast;
 

@@ -16,14 +16,15 @@ pub struct DeleteCommandInfo {
 /// Extract delete command information
 pub fn extract_delete_command(stmt: &Statement) -> Option<DeleteCommandInfo> {
     if let Statement::Delete(delete) = stmt {
-        // Get table type
-        if delete.tables.is_empty() || delete.tables[0].0.is_empty() {
-            return None;
-        }
         // Get table name
-        let table = match &delete.tables[0].0[0] {
-            ObjectNamePart::Identifier(ident) => ident.value.clone()
-        };        
+        let table = if delete.tables.is_empty() || delete.tables[0].0.is_empty() {
+            return None;
+        } else {
+            match &delete.tables[0].0[0] {
+                ObjectNamePart::Identifier(ident) => ident.value.clone()
+            }
+        };
+        
         // Extract key and/or member
         if let Some(expr) = &delete.selection {
             // Key is required

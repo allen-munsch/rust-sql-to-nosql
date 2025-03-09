@@ -1,7 +1,7 @@
 // matchers/select.rs - Predicate functions for SELECT statement pattern matching
 // Each function tests if a statement matches a particular SELECT pattern from the BNF grammar
 
-use sqlparser::ast::Statement;
+use sqlparser::ast::{Expr, SelectItem, Statement};
 use crate::ast;
 
 // --------------------------------
@@ -158,8 +158,14 @@ pub fn is_list_getall(stmt: &Statement) -> bool {
 
 /// <list-get-index> ::= "SELECT" "*" "FROM" <table> "__list" "WHERE" "key" "=" <value> "AND" "index" "=" <index>
 pub fn is_list_get_index(stmt: &Statement) -> bool {
-    is_wildcard_select(stmt) && is_list_table(stmt) && 
-    has_key_equals(stmt) && has_field_equals(stmt, "index")
+    // First check if it's a wildcard select
+    is_wildcard_select(stmt) && 
+    // Check if we're querying a list table
+    is_list_table(stmt) && 
+    // Check for key condition
+    has_key_equals(stmt) && 
+    // Check for index condition
+    has_field_equals(stmt, "index")
 }
 
 /// <list-get-range> ::= "SELECT" "*" "FROM" <table> "__list" "WHERE" "key" "=" <value> "LIMIT" <limit>
@@ -209,3 +215,41 @@ pub fn query_has_limit(query: &sqlparser::ast::Query) -> Option<u64> {
         }
     })
 }
+
+pub fn is_string_get_value(stmt: &Statement) -> bool {
+    // Check if it's a SELECT statement
+    let query = match ast::sel_get_query(stmt) {
+        Some(query) => query,
+        None => return false,
+    };
+    
+    // Check if we're selecting from a string table
+    let select = match ast::sel_get_select(query) {
+        Some(select) => select,
+        None => return false,
+    };
+    
+    // Use the existing is_string_table helper function
+    if !is_string_table(stmt) {
+        return false;
+    }
+    
+    // Check if we're selecting only the 'value' field
+    if select.projection.len() != 1 {
+        return false;
+    }
+    
+    let is_value_field = match &select.projection[0] {
+        SelectItem::UnnamedExpr(Expr::Identifier(ident)) => 
+            ident.value.to_lowercase() == "value",
+        _ => false,
+    };
+    
+    if !is_value_field {
+        return false;
+    }
+    
+    // Check for key = 'value' condition
+    has_key_equals(stmt)
+}
+

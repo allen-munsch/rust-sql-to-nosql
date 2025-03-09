@@ -1,3 +1,5 @@
+// src/pattern/extractors/query_extractors.rs
+
 use sqlparser::ast::{Query, SetExpr, SelectItem, Expr, TableFactor, ObjectNamePart, OrderByKind};
 use super::common::extract_key_from_condition;
 use super::common::determine_table_type;

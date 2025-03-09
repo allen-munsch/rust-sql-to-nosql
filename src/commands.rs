@@ -66,6 +66,7 @@ pub fn generate_command(stmt: &Statement) -> Option<RedisCommand> {
    }
    
    if let Some(info) = extractors::extract_list_getall(stmt) {
+       // TODO
        return Some(RedisCommand::new("LRANGE", vec![info.key, "0".to_string(), "-1".to_string()]));
    }
    
@@ -144,39 +145,35 @@ pub fn generate_command(stmt: &Statement) -> Option<RedisCommand> {
    // Delete operations
    if let Some(info) = extractors::extract_delete_command(stmt) {
        match determine_table_type(&info.table) {
-           "string" | "hash" => {
-               // DEL
-               return Some(RedisCommand::new("DEL", vec![info.key]));
+           "string" | "hash" | "list" | "set" | "zset" => {
+               if info.member.is_none() && info.index.is_none() {
+                   // DEL
+                   return Some(RedisCommand::new("DEL", vec![info.key]));
+               }
+           },
+           _ => {}
+       }
+
+       // Type-specific member deletion
+       match determine_table_type(&info.table) {
+           "hash" => {
+               if let Some(field) = info.member {
+                   return Some(RedisCommand::new("HDEL", vec![info.key, field]));
+               }
            },
            "list" => {
-               if let Some(index) = info.index {
-                   // No direct way to delete by index, would need LSET + LREM
-                   return Some(RedisCommand::new("LSET", vec![
-                       info.key, 
-                       index, 
-                       "__deleted__".to_string()
-                   ]));
-               } else {
-                   // DEL entire list
-                   return Some(RedisCommand::new("DEL", vec![info.key]));
+               if let Some(value) = info.member {
+                   return Some(RedisCommand::new("LREM", vec![info.key, "0".to_string(), value]));
                }
            },
            "set" => {
                if let Some(member) = info.member {
-                   // SREM
                    return Some(RedisCommand::new("SREM", vec![info.key, member]));
-               } else {
-                   // DEL entire set
-                   return Some(RedisCommand::new("DEL", vec![info.key]));
                }
            },
            "zset" => {
                if let Some(member) = info.member {
-                   // ZREM
                    return Some(RedisCommand::new("ZREM", vec![info.key, member]));
-               } else {
-                   // DEL entire zset
-                   return Some(RedisCommand::new("DEL", vec![info.key]));
                }
            },
            _ => {}

@@ -222,4 +222,3 @@ pub fn extract_zset_get_reversed(stmt: &Statement) -> Option<ZSetGetReversedInfo
         None
     }
 }
-

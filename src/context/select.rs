@@ -245,3 +245,16 @@ impl ContextBuilder for ZSetGetReversedContextBuilder {
         Some(context)
     }
 }
+
+pub struct StringGetValueContextBuilder;
+impl ContextBuilder for StringGetValueContextBuilder {
+    fn build_context(&self, stmt: &Statement) -> Option<TemplateContext> {
+        let key = ast::sel_get_query(stmt)
+            .and_then(ast::sel_get_select)
+            .and_then(|select| ast::sel_get_key_value(&select.selection))?;
+            
+        let mut context = HashMap::new();
+        context.insert("key".to_string(), key);
+        Some(context)
+    }
+}

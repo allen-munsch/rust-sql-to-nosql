@@ -1,0 +1,39 @@
+-- String operations
+SELECT * FROM users WHERE key = 'user:1001'
+SELECT value FROM config WHERE key = 'app:settings'
+INSERT INTO users (key, value) VALUES ('user:1002', 'Jane Smith')
+UPDATE settings SET value = 'new-value' WHERE key = 'site:theme'
+DELETE FROM cache WHERE key = 'temp:data'
+
+-- Hash operations
+SELECT * FROM users__hash WHERE key = 'user:1001'
+SELECT name, email FROM users__hash WHERE key = 'user:1001'
+INSERT INTO users__hash (key, name, email, age) VALUES ('user:1003', 'Alice Jones', 'alice@example.com', '29')
+UPDATE users__hash SET status = 'active', last_login = '2023-06-15' WHERE key = 'user:1001'
+DELETE FROM users__hash WHERE key = 'user:temp'
+DELETE FROM users__hash WHERE key = 'user:1001' AND field = 'temporary_token'
+
+-- List operations
+SELECT * FROM posts__list WHERE key = 'user:1001:posts'
+SELECT * FROM timeline__list WHERE key = 'global:timeline' LIMIT 10
+SELECT * FROM messages__list WHERE key = 'chat:1001' AND index = 0
+INSERT INTO logs__list (key, value) VALUES ('app:logs', 'User logged in')
+UPDATE notifications__list SET value = 'Updated message' WHERE key = 'user:1001:notifications' AND index = 2
+DELETE FROM queue__list WHERE key = 'task:queue'
+DELETE FROM posts__list WHERE key = 'user:1001:posts' AND value = 'spam message'
+
+-- Set operations
+SELECT * FROM followers__set WHERE key = 'user:1001:followers'
+SELECT * FROM tags__set WHERE key = 'post:1001:tags' AND member = 'important'
+INSERT INTO interests__set (key, member) VALUES ('user:1001:interests', 'technology')
+DELETE FROM blocked__set WHERE key = 'user:1001:blocked'
+DELETE FROM tags__set WHERE key = 'post:1001:tags' AND member = 'temporary'
+
+-- Sorted Set operations
+SELECT * FROM leaderboard__zset WHERE key = 'game:global'
+SELECT * FROM ranking__zset WHERE key = 'users:points' AND score > 1000
+SELECT * FROM activity__zset WHERE key = 'site:activity' ORDER BY score DESC
+INSERT INTO leaderboard__zset (key, member, score) VALUES ('game:week1', 'user:1001', '2500')
+UPDATE scores__zset SET score = '3000' WHERE key = 'contest:final' AND member = 'user:1002'
+DELETE FROM leaderboard__zset WHERE key = 'game:old'
+DELETE FROM ranking__zset WHERE key = 'users:points' AND member = 'user:deleted'

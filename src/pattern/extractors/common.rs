@@ -21,6 +21,7 @@ pub fn extract_key_from_condition(expr: &Expr) -> Option<String> {
                     Expr::Value(value_with_span) => {
                         match &value_with_span.value {
                             Value::SingleQuotedString(s) | Value::DoubleQuotedString(s) => Some(s.clone()),
+                            Value::Number(n, _) => Some(n.clone()),
                             _ => None,
                         }
                     },
@@ -142,54 +143,5 @@ pub fn is_table_type(table: &TableFactor, suffix: &str) -> bool {
         false
     } else {
         false
-    }
-}
-
-// pattern/extractors/common.rs
-pub mod table {
-    use sqlparser::ast::{ObjectNamePart, TableFactor};
-
-    fn get_table_name(table: &TableFactor) -> Option<String> {
-        if let TableFactor::Table { name, .. } = table {
-            name.0.first().map(|part| {
-                let ObjectNamePart::Identifier(ident) = part;
-                ident.value.clone()
-            })
-        } else {
-            None
-        }
-    }
-    pub fn is_table_type(table: &TableFactor, suffix: &str) -> bool {
-        get_table_name(table)
-            .map(|name| name.ends_with(suffix))
-            .unwrap_or(false)
-    }
-}
-
-pub mod conditions {
-    use sqlparser::ast::{BinaryOperator, Expr, Value};
-
-    pub fn get_key(expr: &Expr) -> Option<String> {
-        match expr {
-            Expr::BinaryOp { left, op, right } => {
-                if *op == BinaryOperator::Eq && 
-                   matches!(&**left, Expr::Identifier(ident) if ident.value.to_lowercase() == "key") {
-                    match &**right {
-                        Expr::Value(value_with_span) => {
-                            match &value_with_span.value {
-                                Value::SingleQuotedString(s) | Value::DoubleQuotedString(s) => Some(s.clone()),
-                                _ => None,
-                            }
-                        },
-                        _ => None,
-                    }
-                } else if *op == BinaryOperator::And {
-                    get_key(left).or_else(|| get_key(right))
-                } else {
-                    None
-                }
-            },
-            _ => None,
-        }
     }
 }

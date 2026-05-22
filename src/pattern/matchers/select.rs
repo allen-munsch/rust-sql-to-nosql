@@ -120,6 +120,62 @@ pub fn has_order_by_score_desc(stmt: &Statement) -> bool {
         .unwrap_or(false)
 }
 
+/// Check if the WHERE clause has a "key IN (...)" condition
+pub fn has_key_in(stmt: &Statement) -> bool {
+    ast::sel_get_query(stmt)
+        .and_then(ast::sel_get_select)
+        .map(|select| ast::sel_get_key_in_values(&select.selection).is_some())
+        .unwrap_or(false)
+}
+
+/// Check if the SELECT is COUNT(*) aggregation
+pub fn is_count_star(stmt: &Statement) -> bool {
+    ast::sel_get_query(stmt)
+        .and_then(ast::sel_get_select)
+        .map(|select| ast::sel_is_count_star(select))
+        .unwrap_or(false)
+}
+
+/// Check if the SELECT has a specific aggregate function (e.g. AVG, SUM, MIN, MAX)
+pub fn has_aggregate(stmt: &Statement, func_name: &str) -> bool {
+    ast::sel_get_query(stmt)
+        .and_then(ast::sel_get_select)
+        .and_then(|select| ast::sel_get_aggregate(select))
+        .map(|agg| agg.function == func_name.to_uppercase())
+        .unwrap_or(false)
+}
+
+/// Check if the SELECT is a zset aggregate (AVG/SUM/MIN/MAX of score on __zset table)
+pub fn is_zset_aggregate(stmt: &Statement, func_name: &str) -> bool {
+    is_zset_table(stmt) && has_key_equals(stmt) && has_aggregate(stmt, func_name)
+}
+
+/// Check if the SELECT is a hash aggregate (AVG/SUM/MIN/MAX of a field on __hash table)
+pub fn is_hash_aggregate(stmt: &Statement, func_name: &str) -> bool {
+    is_hash_table(stmt) && has_key_equals(stmt) && has_aggregate(stmt, func_name)
+}
+
+/// Check if the SELECT is a list aggregate (AVG/SUM/MIN/MAX of values on __list table)
+pub fn is_list_aggregate(stmt: &Statement, func_name: &str) -> bool {
+    is_list_table(stmt) && has_key_equals(stmt) && has_aggregate(stmt, func_name)
+}
+
+/// Check if the WHERE clause has a score BETWEEN condition
+pub fn has_score_between(stmt: &Statement) -> bool {
+    ast::sel_get_query(stmt)
+        .and_then(ast::sel_get_select)
+        .map(|select| ast::sel_get_score_between(&select.selection).is_some())
+        .unwrap_or(false)
+}
+
+/// Check if the WHERE clause has an index < value condition
+pub fn has_index_lt(stmt: &Statement) -> bool {
+    ast::sel_get_query(stmt)
+        .and_then(ast::sel_get_select)
+        .map(|select| ast::sel_get_index_lt(&select.selection).is_some())
+        .unwrap_or(false)
+}
+
 /// Check if the query has a LIMIT clause
 pub fn has_limit(stmt: &Statement) -> bool {
     ast::sel_get_query(stmt)
@@ -130,6 +186,11 @@ pub fn has_limit(stmt: &Statement) -> bool {
 // --------------------------------
 // BNF Rule Matchers - Direct mapping to BNF rules
 // --------------------------------
+
+/// <string-get-multi> ::= "SELECT" "*" "FROM" <table> "WHERE" "key" "IN" "(" <value1> "," <value2> ... ")"
+pub fn is_string_get_multi(stmt: &Statement) -> bool {
+    is_wildcard_select(stmt) && is_string_table(stmt) && has_key_in(stmt)
+}
 
 /// <string-get> ::= "SELECT" "*" "FROM" <table> "WHERE" "key" "=" <value>
 pub fn is_string_get(stmt: &Statement) -> bool {
@@ -151,9 +212,14 @@ pub fn is_hash_hmget(stmt: &Statement) -> bool {
     is_multi_field_select(stmt) && is_hash_table(stmt) && has_key_equals(stmt)
 }
 
-/// <list-get> ::= "SELECT" "*" "FROM" <table> "__list" "WHERE" "key" "=" <value>
-pub fn is_list_getall(stmt: &Statement) -> bool {
-    is_wildcard_select(stmt) && is_list_table(stmt) && has_key_equals(stmt)
+/// <hash-count> ::= SELECT COUNT(*) FROM table__hash WHERE key = value
+pub fn is_hash_count(stmt: &Statement) -> bool {
+    is_count_star(stmt) && is_hash_table(stmt) && has_key_equals(stmt)
+}
+
+/// <list-get-index-range> ::= SELECT * FROM table__list WHERE key = value AND index < n
+pub fn is_list_get_index_range(stmt: &Statement) -> bool {
+    is_wildcard_select(stmt) && is_list_table(stmt) && has_key_equals(stmt) && has_index_lt(stmt)
 }
 
 /// <list-get-index> ::= "SELECT" "*" "FROM" <table> "__list" "WHERE" "key" "=" <value> "AND" "index" "=" <index>
@@ -173,6 +239,21 @@ pub fn is_list_get_range(stmt: &Statement) -> bool {
     is_wildcard_select(stmt) && is_list_table(stmt) && has_key_equals(stmt) && has_limit(stmt)
 }
 
+/// <list-getall> ::= SELECT * FROM table__list WHERE key = value
+pub fn is_list_getall(stmt: &Statement) -> bool {
+    is_wildcard_select(stmt) && is_list_table(stmt) && has_key_equals(stmt)
+}
+
+/// <list-count> ::= SELECT COUNT(*) FROM table__list WHERE key = value
+pub fn is_list_count(stmt: &Statement) -> bool {
+    is_count_star(stmt) && is_list_table(stmt) && has_key_equals(stmt)
+}
+
+/// <set-count> ::= SELECT COUNT(*) FROM table__set WHERE key = value
+pub fn is_set_count(stmt: &Statement) -> bool {
+    is_count_star(stmt) && is_set_table(stmt) && has_key_equals(stmt)
+}
+
 /// <set-getall> ::= "SELECT" "*" "FROM" <table> "__set" "WHERE" "key" "=" <value>
 pub fn is_set_getall(stmt: &Statement) -> bool {
     is_wildcard_select(stmt) && is_set_table(stmt) && has_key_equals(stmt)
@@ -189,6 +270,12 @@ pub fn is_zset_getall(stmt: &Statement) -> bool {
     is_wildcard_select(stmt) && is_zset_table(stmt) && has_key_equals(stmt)
 }
 
+/// <zset-get-score-between> ::= SELECT * FROM table__zset WHERE key = value AND score BETWEEN min AND max
+pub fn is_zset_get_score_between(stmt: &Statement) -> bool {
+    is_wildcard_select(stmt) && is_zset_table(stmt) && 
+    has_key_equals(stmt) && has_score_between(stmt)
+}
+
 /// <zset-get-score-range> ::= "SELECT" "*" "FROM" <table> "__zset" "WHERE" "key" "=" <value> "AND" "score" <comparison> <score>
 pub fn is_zset_get_score_range(stmt: &Statement) -> bool {
     is_wildcard_select(stmt) && is_zset_table(stmt) && 
@@ -199,6 +286,17 @@ pub fn is_zset_get_score_range(stmt: &Statement) -> bool {
 pub fn is_zset_get_reversed(stmt: &Statement) -> bool {
     is_wildcard_select(stmt) && is_zset_table(stmt) && 
     has_key_equals(stmt) && has_order_by_score_desc(stmt)
+}
+
+/// <zset-count-score-range> ::= SELECT COUNT(*) FROM table__zset WHERE key = value AND score BETWEEN min AND max
+pub fn is_zset_count_score_range(stmt: &Statement) -> bool {
+    is_count_star(stmt) && is_zset_table(stmt) && 
+    has_key_equals(stmt) && has_score_between(stmt)
+}
+
+/// <zset-count> ::= SELECT COUNT(*) FROM table__zset WHERE key = value
+pub fn is_zset_count(stmt: &Statement) -> bool {
+    is_count_star(stmt) && is_zset_table(stmt) && has_key_equals(stmt)
 }
 
 pub fn query_has_limit(query: &sqlparser::ast::Query) -> Option<u64> {

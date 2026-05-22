@@ -59,6 +59,7 @@ impl TemplateEngine {
         
         // String operations
         tera.add_raw_template("string_get", "GET {{ key }}")?;
+        tera.add_raw_template("string_mget", "MGET {{ keys }}")?;
         tera.add_raw_template("string_set", "SET {{ key }} {{ value }}")?;
         tera.add_raw_template("string_update", "SET {{ key }} {{ value }}")?;
         
@@ -70,15 +71,18 @@ impl TemplateEngine {
         tera.add_raw_template("hash_update", "HSET {{ key }} {{ field_values }}")?;
         tera.add_raw_template("hash_delete", "DEL {{ key }}")?;
         tera.add_raw_template("hash_delete_field", "HDEL {{ key }} {{ field }}")?;
+        tera.add_raw_template("hash_count", "HLEN {{ key }}")?;
         
         // List operations
         tera.add_raw_template("list_getall", "LRANGE {{ key }} 0 -1")?;
         tera.add_raw_template("list_get_index", "LINDEX {{ key }} {{ index }}")?;
+        tera.add_raw_template("list_get_index_range", "LRANGE {{ key }} 0 {{ stop }}")?;
         tera.add_raw_template("list_get_range", "LRANGE {{ key }} {{ start }} {{ stop }}")?;
         tera.add_raw_template("list_push", "RPUSH {{ key }} {{ value }}")?;
         tera.add_raw_template("list_update", "LSET {{ key }} {{ index }} {{ value }}")?;
         tera.add_raw_template("list_delete", "DEL {{ key }}")?;
         tera.add_raw_template("list_delete_value", "LREM {{ key }} 0 {{ value }}")?;
+        tera.add_raw_template("list_count", "LLEN {{ key }}")?;
         
         // Set operations
         tera.add_raw_template("set_getall", "SMEMBERS {{ key }}")?;
@@ -86,15 +90,20 @@ impl TemplateEngine {
         tera.add_raw_template("set_add", "SADD {{ key }} {{ members }}")?;
         tera.add_raw_template("set_delete", "DEL {{ key }}")?;
         tera.add_raw_template("set_delete_member", "SREM {{ key }} {{ member }}")?;
+        tera.add_raw_template("set_delete_multi_member", "SREM {{ key }} {{ members }}")?;
+        tera.add_raw_template("set_count", "SCARD {{ key }}")?;
         
         // Sorted Set operations
         tera.add_raw_template("zset_getall", "ZRANGEBYSCORE {{ key }} -inf +inf")?;
         tera.add_raw_template("zset_get_score_range", "ZRANGEBYSCORE {{ key }} {{ min }} {{ max }}")?;
+        tera.add_raw_template("zset_get_score_between", "ZRANGEBYSCORE {{ key }} {{ min }} {{ max }}")?;
         tera.add_raw_template("zset_get_reversed", "ZREVRANGEBYSCORE {{ key }} {{ max }} {{ min }}")?;
         tera.add_raw_template("zset_add", "ZADD {{ key }} {{ score }} {{ member }}")?;
         tera.add_raw_template("zset_update", "ZADD {{ key }} {{ score }} {{ member }}")?;
         tera.add_raw_template("zset_delete", "DEL {{ key }}")?;
         tera.add_raw_template("zset_delete_member", "ZREM {{ key }} {{ member }}")?;
+        tera.add_raw_template("zset_count", "ZCARD {{ key }}")?;
+        tera.add_raw_template("zset_count_score_range", "ZCOUNT {{ key }} {{ min }} {{ max }}")?;
         
         Ok(())
     }

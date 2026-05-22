@@ -63,9 +63,14 @@ impl SqlToRedisTransformer {
         
         let stmt = &ast[0];
         
-        // First strategy: Rule-based matching with templates
+        // First strategy: Rule-based matching
         for rule in &self.rules {
             if rule.matches(stmt) {
+                // Check for direct command (Lua EVAL scripts, etc.)
+                if let Some(command) = rule.get_direct_command(stmt) {
+                    return Ok(command);
+                }
+                
                 // Get context from the rule for the matched statement
                 if let Some(context) = rule.get_context(stmt) {
                     // Get template name from the rule
@@ -124,6 +129,7 @@ pub mod context;
 pub mod rules;
 pub mod templates;
 pub mod commands;
+pub mod lua;
 
 #[cfg(test)]
 mod tests {

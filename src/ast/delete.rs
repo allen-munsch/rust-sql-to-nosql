@@ -115,6 +115,56 @@ pub fn extract_field_condition(expr: &Expr, field_name: &str) -> Option<String> 
     }
 }
 
+/// Get member values from an IN expression: member IN (...)
+pub fn get_member_in_values(stmt: &Statement) -> Option<Vec<String>> {
+    match stmt {
+        Statement::Delete(delete) => {
+            delete.selection.as_ref().and_then(extract_member_in)
+        },
+        _ => None,
+    }
+}
+
+/// Recursively extract member IN (...) from an expression (handles AND)
+fn extract_member_in(expr: &Expr) -> Option<Vec<String>> {
+    match expr {
+        Expr::InList { expr: inner, list, negated, .. } => {
+            if *negated {
+                return None;
+            }
+            match &**inner {
+                Expr::Identifier(ident) if ident.value.to_lowercase() == "member" => {
+                    let values: Vec<String> = list.iter()
+                        .filter_map(extract_value_from_expr)
+                        .collect();
+                    if values.is_empty() { None } else { Some(values) }
+                }
+                _ => None,
+            }
+        }
+        Expr::BinaryOp { left, op, right } => {
+            if *op == sqlparser::ast::BinaryOperator::And {
+                extract_member_in(left).or_else(|| extract_member_in(right))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Extract a literal value from an expression
+fn extract_value_from_expr(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Value(value_with_span) => match &value_with_span.value {
+            Value::SingleQuotedString(s) | Value::DoubleQuotedString(s) => Some(s.clone()),
+            Value::Number(n, _) => Some(n.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// Extract all conditions from a WHERE clause
 pub fn extract_conditions(expr: &Option<Expr>) -> HashMap<String, String> {
     let mut conditions = HashMap::new();

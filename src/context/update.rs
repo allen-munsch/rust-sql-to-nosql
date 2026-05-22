@@ -7,6 +7,11 @@ use crate::ast;
 use crate::context::TemplateContext;
 use crate::context::ContextBuilder;
 
+/// Helper: find a field value in the ordered assignments list
+fn find_assignment<'a>(assignments: &'a [(String, String)], field: &str) -> Option<&'a String> {
+    assignments.iter().find_map(|(f, v)| if f == field { Some(v) } else { None })
+}
+
 // --------------------------------
 // String Command Context Builders
 // --------------------------------
@@ -18,7 +23,7 @@ impl ContextBuilder for StringUpdateContextBuilder {
     fn build_context(&self, stmt: &Statement) -> Option<TemplateContext> {
         let key = ast::upd_get_key_value(stmt)?;
         let assignments = ast::upd_get_assignments(stmt)?;
-        let value = assignments.get("value")?.clone();
+        let value = find_assignment(&assignments, "value")?.clone();
         
         let mut context = HashMap::new();
         context.insert("key".to_string(), key);
@@ -43,7 +48,7 @@ impl ContextBuilder for HashUpdateContextBuilder {
             return None;
         }
         
-        // Format field-value pairs for template
+        // Format field-value pairs for template (preserves SQL order)
         let fields_formatted: Vec<String> = assignments.iter()
             .map(|(field, value)| format!("{} {}", field, value))
             .collect();
@@ -68,7 +73,7 @@ impl ContextBuilder for ListUpdateContextBuilder {
         let index = ast::upd_get_field_filter(stmt, "index")?;
         
         let assignments = ast::upd_get_assignments(stmt)?;
-        let value = assignments.get("value")?.clone();
+        let value = find_assignment(&assignments, "value")?.clone();
         
         let mut context = HashMap::new();
         context.insert("key".to_string(), key);
@@ -91,7 +96,7 @@ impl ContextBuilder for ZSetUpdateContextBuilder {
         let member = ast::upd_get_field_filter(stmt, "member")?;
         
         let assignments = ast::upd_get_assignments(stmt)?;
-        let score = assignments.get("score")?.clone();
+        let score = find_assignment(&assignments, "score")?.clone();
         
         let mut context = HashMap::new();
         context.insert("key".to_string(), key);

@@ -94,12 +94,23 @@ pub fn is_list_delete_value(stmt: &Statement) -> bool {
 
 /// <set-delete> ::= "DELETE" "FROM" <table> "__set" "WHERE" "key" "=" <key>
 pub fn is_set_delete(stmt: &Statement) -> bool {
-    is_delete(stmt) && is_set_table(stmt) && has_key_equals(stmt) && !has_field_equals(stmt, "member")
+    is_delete(stmt) && is_set_table(stmt) && has_key_equals(stmt) 
+        && !has_field_equals(stmt, "member") && !has_member_in(stmt)
 }
 
 /// <set-delete-member> ::= "DELETE" "FROM" <table> "__set" "WHERE" "key" "=" <key> "AND" "member" "=" <member>
 pub fn is_set_delete_member(stmt: &Statement) -> bool {
     is_delete(stmt) && is_set_table(stmt) && has_key_equals(stmt) && has_field_equals(stmt, "member")
+}
+
+/// <set-delete-multi-member> ::= DELETE FROM table__set WHERE key = key AND member IN (m1, m2, ...)
+pub fn is_set_delete_multi_member(stmt: &Statement) -> bool {
+    is_delete(stmt) && is_set_table(stmt) && has_key_equals(stmt) && has_member_in(stmt)
+}
+
+/// Check if DELETE has a member IN (...) condition
+pub fn has_member_in(stmt: &Statement) -> bool {
+    ast::delete::get_member_in_values(stmt).is_some()
 }
 
 /// <zset-delete> ::= "DELETE" "FROM" <table> "__zset" "WHERE" "key" "=" <key>

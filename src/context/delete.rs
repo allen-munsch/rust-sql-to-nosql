@@ -120,6 +120,23 @@ impl ContextBuilder for SetDeleteMemberContextBuilder {
     }
 }
 
+/// Builder for set SREM with multiple members
+/// <set-delete-multi-member> ::= DELETE FROM table__set WHERE key = key AND member IN (m1, m2, ...)
+pub struct SetDeleteMultiMemberContextBuilder;
+impl ContextBuilder for SetDeleteMultiMemberContextBuilder {
+    fn build_context(&self, stmt: &Statement) -> Option<TemplateContext> {
+        let key = ast::delete::get_key_value(stmt)?;
+        let members = ast::delete::get_member_in_values(stmt)?;
+        if members.is_empty() {
+            return None;
+        }
+        let mut context = HashMap::new();
+        context.insert("key".to_string(), key);
+        context.insert("members".to_string(), members.join(" "));
+        Some(context)
+    }
+}
+
 // --------------------------------
 // Sorted Set Command Context Builders
 // --------------------------------

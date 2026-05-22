@@ -47,9 +47,9 @@ fn test_full_sql_redis_workflow() {
     let result = transformer.transform("INSERT INTO leaderboard__zset (key, member, score) VALUES ('game:global', 'user:1001', '2500')").unwrap();
     assert_eq!(result, "ZADD game:global 2500 user:1001");
     
-    // Get top players
+    // Get top players (ORDER BY score DESC produces ZREVRANGEBYSCORE)
     let result = transformer.transform("SELECT * FROM leaderboard__zset WHERE key = 'game:global' ORDER BY score DESC LIMIT 10").unwrap();
-    assert_eq!(result, "ZRANGEBYSCORE game:global -inf +inf");
+    assert_eq!(result, "ZREVRANGEBYSCORE game:global +inf -inf");
     
     // Delete user
     let result = transformer.transform("DELETE FROM users__hash WHERE key = 'user:1001'").unwrap();

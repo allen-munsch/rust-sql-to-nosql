@@ -23,6 +23,12 @@ pub trait Rule {
     fn get_context(&self, stmt: &Statement) -> Option<TemplateContext>;
     fn get_template_name(&self) -> &str;
     
+    /// Returns a direct command string (bypassing template engine).
+    /// Used for Lua EVAL scripts and other complex commands.
+    fn get_direct_command(&self, _stmt: &Statement) -> Option<String> {
+        None
+    }
+    
     /// Returns the function name used for matching
     fn get_matcher_name(&self) -> Option<&str> {
         None // Default implementation returns None
@@ -47,6 +53,8 @@ pub struct GenericRule<F> {
     matcher_name: Option<String>,
     sql_pattern: Option<String>,
     redis_pattern: Option<String>,
+    /// Optional direct command builder (for Lua EVAL commands)
+    direct_command_builder: Option<Box<dyn Fn(&Statement) -> Option<String>>>,
 }
 
 impl<F> GenericRule<F> 
@@ -61,6 +69,7 @@ where
             matcher_name: None,
             sql_pattern: None,
             redis_pattern: None,
+            direct_command_builder: None,
         }
     }
     
@@ -76,6 +85,15 @@ where
     
     pub fn with_redis_pattern(mut self, pattern: &str) -> Self {
         self.redis_pattern = Some(pattern.to_string());
+        self
+    }
+    
+    /// Attach a direct command builder for Lua EVAL commands
+    pub fn with_direct_command<D>(mut self, builder: D) -> Self
+    where
+        D: Fn(&Statement) -> Option<String> + 'static,
+    {
+        self.direct_command_builder = Some(Box::new(builder));
         self
     }
 }
@@ -94,6 +112,10 @@ where
     
     fn get_template_name(&self) -> &str {
         &self.template_name
+    }
+    
+    fn get_direct_command(&self, stmt: &Statement) -> Option<String> {
+        self.direct_command_builder.as_ref().and_then(|f| f(stmt))
     }
     
     fn get_matcher_name(&self) -> Option<&str> {

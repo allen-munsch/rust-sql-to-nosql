@@ -72,17 +72,18 @@ pub fn create_delete_rules() -> Vec<Box<dyn Rule>> {
         
         // --------------------------------
         // Set operations
+        // (more specific patterns first to avoid shadowing)
         // --------------------------------
         
-        // <set-delete> ::= "DELETE" "FROM" <table> "__set" "WHERE" "key" "=" <key>
+        // <set-delete-multi-member> ::= DELETE FROM table__set WHERE key = key AND member IN (m1, m2, ...)
         Box::new(GenericRule::new(
-            delete::is_set_delete,
-            Box::new(context::SetDeleteContextBuilder), 
-            "set_delete"
+            delete::is_set_delete_multi_member,
+            Box::new(context::SetDeleteMultiMemberContextBuilder), 
+            "set_delete_multi_member"
         )
-        .with_matcher_name("is_set_delete")
-        .with_sql_pattern("DELETE FROM table__set WHERE key = 'key'")
-        .with_redis_pattern("DEL key")),
+        .with_matcher_name("is_set_delete_multi_member")
+        .with_sql_pattern("DELETE FROM table__set WHERE key = 'key' AND member IN ('m1', 'm2')")
+        .with_redis_pattern("SREM key m1 m2")),
         
         // <set-delete-member> ::= "DELETE" "FROM" <table> "__set" "WHERE" "key" "=" <key> "AND" "member" "=" <member>
         Box::new(GenericRule::new(
@@ -93,6 +94,16 @@ pub fn create_delete_rules() -> Vec<Box<dyn Rule>> {
         .with_matcher_name("is_set_delete_member")
         .with_sql_pattern("DELETE FROM table__set WHERE key = 'key' AND member = 'member'")
         .with_redis_pattern("SREM key member")),
+        
+        // <set-delete> ::= "DELETE" "FROM" <table> "__set" "WHERE" "key" "=" <key>
+        Box::new(GenericRule::new(
+            delete::is_set_delete,
+            Box::new(context::SetDeleteContextBuilder), 
+            "set_delete"
+        )
+        .with_matcher_name("is_set_delete")
+        .with_sql_pattern("DELETE FROM table__set WHERE key = 'key'")
+        .with_redis_pattern("DEL key")),
         
         // --------------------------------
         // Sorted Set operations

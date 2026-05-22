@@ -25,6 +25,24 @@ impl ContextBuilder for StringGetContextBuilder {
     }
 }
 
+// String MGET context builder for key IN (...)
+pub struct StringGetMultiContextBuilder;
+impl ContextBuilder for StringGetMultiContextBuilder {
+    fn build_context(&self, stmt: &Statement) -> Option<TemplateContext> {
+        let keys = ast::sel_get_query(stmt)
+            .and_then(ast::sel_get_select)
+            .and_then(|select| ast::sel_get_key_in_values(&select.selection))?;
+        
+        if keys.is_empty() {
+            return None;
+        }
+        
+        let mut context = HashMap::new();
+        context.insert("keys".to_string(), keys.join(" "));
+        Some(context)
+    }
+}
+
 // --------------------------------
 // Hash Command Context Builders
 // --------------------------------
@@ -32,6 +50,20 @@ impl ContextBuilder for StringGetContextBuilder {
 // Hash HGETALL context builder
 pub struct HashGetAllContextBuilder;
 impl ContextBuilder for HashGetAllContextBuilder {
+    fn build_context(&self, stmt: &Statement) -> Option<TemplateContext> {
+        let key = ast::sel_get_query(stmt)
+            .and_then(ast::sel_get_select)
+            .and_then(|select| ast::sel_get_key_value(&select.selection))?;
+            
+        let mut context = HashMap::new();
+        context.insert("key".to_string(), key);
+        Some(context)
+    }
+}
+
+/// Common builder for COUNT(*) across all table types (just needs key)
+pub struct CountContextBuilder;
+impl ContextBuilder for CountContextBuilder {
     fn build_context(&self, stmt: &Statement) -> Option<TemplateContext> {
         let key = ast::sel_get_query(stmt)
             .and_then(ast::sel_get_select)
@@ -242,6 +274,60 @@ impl ContextBuilder for ZSetGetReversedContextBuilder {
         context.insert("key".to_string(), key);
         context.insert("max".to_string(), "+inf".to_string());
         context.insert("min".to_string(), "-inf".to_string());
+        Some(context)
+    }
+}
+
+// ZSet ZRANGEBYSCORE with BETWEEN context builder
+pub struct ZSetGetScoreBetweenContextBuilder;
+impl ContextBuilder for ZSetGetScoreBetweenContextBuilder {
+    fn build_context(&self, stmt: &Statement) -> Option<TemplateContext> {
+        let key = ast::sel_get_query(stmt)
+            .and_then(ast::sel_get_select)
+            .and_then(|select| ast::sel_get_key_value(&select.selection))?;
+        let (min, max) = ast::sel_get_query(stmt)
+            .and_then(ast::sel_get_select)
+            .and_then(|select| ast::sel_get_score_between(&select.selection))?;
+        let mut context = HashMap::new();
+        context.insert("key".to_string(), key);
+        context.insert("min".to_string(), min);
+        context.insert("max".to_string(), max);
+        Some(context)
+    }
+}
+
+// ZSet ZCOUNT with score range context builder
+pub struct ZSetCountScoreRangeContextBuilder;
+impl ContextBuilder for ZSetCountScoreRangeContextBuilder {
+    fn build_context(&self, stmt: &Statement) -> Option<TemplateContext> {
+        let key = ast::sel_get_query(stmt)
+            .and_then(ast::sel_get_select)
+            .and_then(|select| ast::sel_get_key_value(&select.selection))?;
+        let (min, max) = ast::sel_get_query(stmt)
+            .and_then(ast::sel_get_select)
+            .and_then(|select| ast::sel_get_score_between(&select.selection))?;
+        let mut context = HashMap::new();
+        context.insert("key".to_string(), key);
+        context.insert("min".to_string(), min);
+        context.insert("max".to_string(), max);
+        Some(context)
+    }
+}
+
+// List LRANGE with index < n context builder
+pub struct ListGetIndexRangeContextBuilder;
+impl ContextBuilder for ListGetIndexRangeContextBuilder {
+    fn build_context(&self, stmt: &Statement) -> Option<TemplateContext> {
+        let key = ast::sel_get_query(stmt)
+            .and_then(ast::sel_get_select)
+            .and_then(|select| ast::sel_get_key_value(&select.selection))?;
+        let index = ast::sel_get_query(stmt)
+            .and_then(ast::sel_get_select)
+            .and_then(|select| ast::sel_get_index_lt(&select.selection))?;
+        let stop = index.parse::<u64>().ok()? - 1;
+        let mut context = HashMap::new();
+        context.insert("key".to_string(), key);
+        context.insert("stop".to_string(), stop.to_string());
         Some(context)
     }
 }

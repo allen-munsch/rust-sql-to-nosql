@@ -73,7 +73,7 @@ pub fn has_field_equals(stmt: &Statement, field_name: &str) -> bool {
 /// Check if the UPDATE statement has a specific SET assignment
 pub fn has_assignment(stmt: &Statement, field_name: &str) -> bool {
     match upd_get_assignments(stmt) {
-        Some(assignments) => assignments.contains_key(field_name),
+        Some(assignments) => assignments.iter().any(|(f, _)| f == field_name),
         None => false,
     }
 }

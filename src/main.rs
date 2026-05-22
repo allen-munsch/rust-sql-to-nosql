@@ -114,7 +114,7 @@ fn print_patterns(transformer: &SqlToRedisTransformer) {
     // Get detailed pattern information
     let details = transformer.get_pattern_details();
     
-    // Group by pattern type/category
+    // Group by SQL pattern type by inspecting the sql_pattern field
     let mut select_patterns = Vec::new();
     let mut insert_patterns = Vec::new();
     let mut update_patterns = Vec::new();
@@ -128,21 +128,30 @@ fn print_patterns(transformer: &SqlToRedisTransformer) {
             pattern.sql_pattern,
             pattern.redis_pattern);
         
-        // Categorize based on name or matcher
-        if pattern.name.contains("get") || pattern.matcher.contains("get") {
+        // Categorize by SQL statement type in the sql_pattern description
+        let sql_upper = pattern.sql_pattern.to_uppercase();
+        if sql_upper.starts_with("SELECT") {
             select_patterns.push(entry);
-        } else if pattern.name.contains("set") || pattern.matcher.contains("set") ||
-                  pattern.name.contains("push") || pattern.matcher.contains("push") ||
-                  pattern.name.contains("add") || pattern.matcher.contains("add") {
+        } else if sql_upper.starts_with("INSERT") {
             insert_patterns.push(entry);
-        } else if pattern.name.contains("update") || pattern.matcher.contains("update") {
+        } else if sql_upper.starts_with("UPDATE") {
             update_patterns.push(entry);
-        } else if pattern.name.contains("delete") || pattern.matcher.contains("delete") ||
-                  pattern.name.contains("del") || pattern.matcher.contains("del") {
+        } else if sql_upper.starts_with("DELETE") {
             delete_patterns.push(entry);
         } else {
-            // Default to select if we can't categorize
-            select_patterns.push(entry);
+            // Fallback: use matcher naming convention
+            let matcher = pattern.matcher.to_lowercase();
+            if matcher.contains("delete") || matcher.contains("_del") {
+                delete_patterns.push(entry);
+            } else if matcher.contains("update") {
+                update_patterns.push(entry);
+            } else if matcher.contains("_set") || matcher.contains("_push") || matcher.contains("_add") {
+                insert_patterns.push(entry);
+            } else if matcher.contains("_get") || matcher.contains("getall") || matcher.contains("ismember") {
+                select_patterns.push(entry);
+            } else {
+                select_patterns.push(entry);
+            }
         }
     }
     
